@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8" />
+    <title>TEditor</title>
+    <style type="text/css">
+#container{
+    border: 1px solid blue;
+    width: 600px;
+    height: 400px;
+}
+    </style>
+</head>
+<body>
+
+<div id="container">
+</div>
+
+<script src="js/jx/jx.core.js"></script>
+<script src="js/jx/jx.base.js"></script>
+<script src="js/jx/jx.browser.js"></script>
+<script src="js/jx/jx.dom.js"></script>
+<script src="js/jx/jx.event.js"></script>
+<script src="js/jx/jx.event.eventparser.js"></script>
+<script src="js/jx/jx.event.eventproxy.js"></script>
+
+<script src="js/teditor.js"></script>
+<script src="js/teditor.util.js"></script>
+<script src="js/teditor.adapter.js"></script>
+<script src="js/teditor.ui.js"></script>
+
+<script >
+window.onload = function(){
+    var container = document.getElementById('container');
+    TEditor.init({
+        container: container
+    });
+}
+</script>
