@@ -1,9 +1,12 @@
 .teditor-container{
-
+    height: 100%;
 }
 .teditor-iframe{
-    
+    width: 100%;
+    height: 100%;
 }
 .teditor-textarea{
-    
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
 }

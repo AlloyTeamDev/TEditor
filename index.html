@@ -3,6 +3,7 @@
 <head>
     <meta http-equiv="content-type" content="text/html; charset=utf-8" />
     <title>TEditor</title>
+    <link rel="stylesheet" type="text/css" href="css/teditor.css">
     <style type="text/css">
 #container{
     border: 1px solid blue;
@@ -12,7 +13,15 @@
     </style>
 </head>
 <body>
-
+<button onclick="editor.setStyle('font-weight','bold')">bold</button>
+<button onclick="editor.setStyle('font-weight','normal')">unbold</button>
+<button onclick="editor.setStyle('font-style','italic')">italic</button>
+<button onclick="editor.setStyle('font-style','normal')">unitalic</button>
+<button onclick="editor.setStyle('color','red')">red</button>
+<button onclick="editor.setStyle('color','blue')">blue</button>
+<button onclick="editor.setStyle('font-size','13pt')">13pt</button>
+<button onclick="editor.setStyle('font-size','16pt')">16pt</button>
+<button onclick="editor.setStyle('font-size','20pt')">20pt</button>
 <div id="container">
 </div>
 
@@ -26,14 +35,15 @@
 
 <script src="js/teditor.js"></script>
 <script src="js/teditor.util.js"></script>
-<script src="js/teditor.adapter.js"></script>
 <script src="js/teditor.ui.js"></script>
 
 <script >
-window.onload = function(){
-    var container = document.getElementById('container');
-    TEditor.init({
-        container: container
+;Jx().$package(function(J){
+    J.event.on(window, 'load', function(){
+        var container = document.getElementById('container');
+        editor = TE.create({
+            container: container
+        });
     });
-}
+});
 </script>

@@ -16,6 +16,14 @@
  */
 ;Jx().$package('TE.util', function(J){
     
+    this.getWindow = function(iframe){
+        return iframe.contentWindow;
+    }
+
+    this.getDocument = function(iframe){
+        return this.getWindow(iframe).document;
+    }
+
     /**
      * 获取当前页面的selection对象
      * @return {Selection}
@@ -32,8 +40,8 @@
      * @param {HTMLElement} container, 目标range的容器, 可选
      * @return {Range}, null
      */
-    this.getRange = function(container) {
-        var selection = this.getSelection();
+    this.getRange = function(win, container) {
+        var selection = this.getSelection(win);
         if (!selection) {
             return null;
         }
@@ -62,7 +70,7 @@
     this.contains = function(container, range) {
         var rangeParent = range.commonAncestorContainer || (range.parentElement && range.parentElement()) || null;
         if (rangeParent) {
-            return TEditor.adapter.contains(container, rangeParent, true);
+            return J.dom.contains(container, rangeParent, true);
         }
         return false;
     };
