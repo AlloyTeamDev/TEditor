@@ -1,0 +1,1 @@
+1.调用多次 setStyle 之后,内容会被 span 拆分的很零碎, 需要合并 style 一样的span

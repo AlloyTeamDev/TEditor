@@ -78,8 +78,14 @@
             selection.removeAllRanges();
             selection.addRange(range);
         },
+        focus: function(){
+            this.doc.body.focus();
+        },
+        blur: function(){
+            this.doc.body.blur();
+        },
         newline: function(){
-            this.doc.body.focus();//TODO 这里有隐患
+            this.focus();//TODO 这里有隐患
             var range = this.getRange();
             var div = J.dom.node('div');
             div.innerHTML = '<br/>';
@@ -94,10 +100,12 @@
         setStyle: function(prop, value){
             var range = this.getRange();
             console.log(range);
+            //TODO 插入后的样式是否要合并?
             //range是否在同一个节点上?
             if(range.startContainer === range.endContainer){
                 //在同一个节点, 继续判断是否已经被包含了 span ?
                 var rangeParent = range.startContainer.parentNode;
+                //TODO 光标重合的处理?
                 if(rangeParent.tagName === 'SPAN'){
                     //已经被span包含了
                     //是否已经有这个样式?
@@ -105,6 +113,12 @@
                         //是也, 返回
                         return;
                     }
+                    //是否range的开始和结束是合并的?(表现为光标)
+                    // if(range.startOffset === range.endOffset){
+                    //     //既然在一起, 改变parentNode的样式就行了
+                    //     J.dom.setStyle(rangeParent, prop, value);
+                    //     return;
+                    // }
                     //是否整个span都在range里面?
                     if(range.startOffset === 0 && range.endOffset === range.endContainer.length){
                         //是的整个整个range都在span里, 直接设置parentNode的样式吧
@@ -134,6 +148,7 @@
                         J.dom.setStyle(span, prop, value);
                         
                         range.selectNode(rangeParent);
+                        //这里没删除之后的空标签问题
                         range.deleteContents();
                         range.insertNode(frag);
                         range.selectNode(span);
@@ -146,20 +161,50 @@
                     range.surroundContents(span);
                     range.selectNode(span);
                     this.restoreRange(range);
-                }   
-            }else{
+                }
+            }else{//=================================================================
                 //跨了几个节点的range
-                var span = J.dom.node('span', {
-                    style: prop + ': ' + value
-                });
-                var df = range.cloneContents();
+                //防止调用 deleteContents 删除之后出现空标签
+                if(range.startOffset === 0 && range.startContainer.parentNode.tagName === 'SPAN'){
+                    //range的开始处于节点的开始处, 整个选中它吧, 父亲不是span就别捣乱
+                    range.setStartBefore(range.startContainer.parentNode);
+                }
+                if(range.endOffset === range.endContainer.length&& range.endContainer.parentNode.tagName === 'SPAN'){
+                    //结束于节点末尾, 也选中他
+                    range.setEndAfter(range.endContainer.parentNode);
+                }
+                //clone一份选中节点, cloneContents 方法会自动闭合选中的标签
+                var frag = range.cloneContents();
+                var retFrag = this.doc.createDocumentFragment();
+                var child, span, firstChild, lastChild;
+                while(child = frag.childNodes[0]){
+                    if(child.nodeType === 3){//文本节点
+                        if(child.textContent){
+                            span = J.dom.node('span', {
+                                style: prop + ': ' + value
+                            });
+                            span.innerHTML = child.textContent;
+                            retFrag.appendChild(span);
+                        }
+                        frag.removeChild(child);
+                    }else if(child.nodeType === 1){//element
+                        if(child.textContent){
+                            if(J.dom.getStyle(child, prop) !== value){
+                            //已经有这个样式就别搞了嘛
+                                J.dom.setStyle(child, prop, value);
+                            }
+                            retFrag.appendChild(child);
+                        }else{//这个节点没有文本内容, 浪费表情 <_<
+                            frag.removeChild(child);
+                        }
+                    }
+                }
+                //deleteContents 会删除选中内容后, 自动闭合周边的标签
                 range.deleteContents();
-                range.insertNode(span);
-                span.appendChild(df);
-                range.selectNode(span);
+                range.insertNode(retFrag);
                 this.restoreRange(range);
             }
-        }
+        }//end of setStyle
     });
     /**
      * 观察者方法
