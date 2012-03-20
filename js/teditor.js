@@ -61,10 +61,15 @@
 
         },
         setEditable: function(status){
+            // if(status){
+            //     this.doc.designMode='on';
+            // }else{
+            //     this.doc.designMode='off';
+            // }
             if(status){
-                this.doc.designMode='on';
+                this.doc.body.contentEditable = true;
             }else{
-                this.doc.designMode='off';
+                this.doc.body.contentEditable = false;
             }
         },
         getSelection: function(){
@@ -88,7 +93,7 @@
             this.focus();//TODO 这里有隐患
             var range = this.getRange();
             var div = J.dom.node('div');
-            div.innerHTML = '<br/>';
+            div.innerHTML = '<span><br/></span>';
             range.insertNode(div);
             range.selectNodeContents(div);
             this.restoreRange(range);
@@ -97,6 +102,7 @@
             this.doc.body.innerHTML = '';
             this.newline();
         },
+        
         setStyle: function(prop, value){
             var range = this.getRange();
             console.log(range);
