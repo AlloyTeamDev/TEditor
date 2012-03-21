@@ -58,19 +58,11 @@
             this.textarea = textarea;
             this.win = TE.util.getWindow(iframe);
             this.doc = TE.util.getDocument(iframe);
-
         },
-        setEditable: function(status){
-            // if(status){
-            //     this.doc.designMode='on';
-            // }else{
-            //     this.doc.designMode='off';
-            // }
-            if(status){
-                this.doc.body.contentEditable = true;
-            }else{
-                this.doc.body.contentEditable = false;
-            }
+        createCursorPlaceholder: function(){
+            var node = document.createElement('img');
+            node.style.cssText = 'width: 0px; height: 0px;';
+            return node;
         },
         getSelection: function(){
             return TE.util.getSelection(this.win);
@@ -83,6 +75,19 @@
             selection.removeAllRanges();
             selection.addRange(range);
         },
+//=================== 对外接口 =====================================
+        setEditable: function(status){
+            // if(status){
+            //     this.doc.designMode='on';
+            // }else{
+            //     this.doc.designMode='off';
+            // }
+            if(status){
+                this.doc.body.contentEditable = true;
+            }else{
+                this.doc.body.contentEditable = false;
+            }
+        },
         focus: function(){
             this.doc.body.focus();
         },
@@ -92,7 +97,7 @@
         newline: function(){
             this.focus();//TODO 这里有隐患
             var range = this.getRange();
-            var div = J.dom.node('div');
+            var div = document.createElement('div');
             div.innerHTML = '<span><br/></span>';
             range.insertNode(div);
             range.selectNodeContents(div);
@@ -102,7 +107,6 @@
             this.doc.body.innerHTML = '';
             this.newline();
         },
-        
         setStyle: function(prop, value){
             var range = this.getRange();
             console.log(range);
@@ -135,10 +139,12 @@
                         var span = J.dom.node('span', {
                             style: oldStyle
                         });
-                        var frag = this.doc.createDocumentFragment();
+                        var frag = document.createDocumentFragment();
                         var span2;
+                        var holder;
                         var beforeText = range.startContainer.textContent.substr(0, range.startOffset);
                         var afterText = range.endContainer.textContent.substr(range.endOffset);
+                        var rangeText = range.toString();
                         if(beforeText){
                             span2 = span.cloneNode(true);
                             span2.innerHTML = beforeText;
@@ -150,15 +156,26 @@
                             span2.innerHTML = afterText;
                             frag.appendChild(span2);
                         }
-                        span.innerHTML = range.toString();
                         J.dom.setStyle(span, prop, value);
                         
                         range.selectNode(rangeParent);
-                        //这里没删除之后的空标签问题
+                        //这里没有删除之后的空标签问题
                         range.deleteContents();
                         range.insertNode(frag);
-                        range.selectNode(span);
-                        this.restoreRange(range);
+                        if(rangeText){
+                            span.innerHTML = rangeText;
+                            range.selectNode(span);
+                            this.restoreRange(range);
+                        }else{
+                            //内容为空的时候要插入一个光标占位符
+                            holder = this.createCursorPlaceholder();
+                            span.appendChild(holder);
+                            range.selectNode(holder);
+                            range.collapse();
+                            this.restoreRange(range);
+                            this.focus();//不focus光标不出来啊
+                        }
+                        
                     }
                 }else{//没有包含span, 直接加一个
                     var span = J.dom.node('span', {
@@ -175,13 +192,13 @@
                     //range的开始处于节点的开始处, 整个选中它吧, 父亲不是span就别捣乱
                     range.setStartBefore(range.startContainer.parentNode);
                 }
-                if(range.endOffset === range.endContainer.length&& range.endContainer.parentNode.tagName === 'SPAN'){
+                if(range.endOffset === range.endContainer.length && range.endContainer.parentNode.tagName === 'SPAN'){
                     //结束于节点末尾, 也选中他
                     range.setEndAfter(range.endContainer.parentNode);
                 }
                 //clone一份选中节点, cloneContents 方法会自动闭合选中的标签
                 var frag = range.cloneContents();
-                var retFrag = this.doc.createDocumentFragment();
+                var retFrag = document.createDocumentFragment();
                 var child, span, firstChild, lastChild;
                 while(child = frag.childNodes[0]){
                     if(child.nodeType === 3){//文本节点
