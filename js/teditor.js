@@ -158,24 +158,26 @@
                         }
                         J.dom.setStyle(span, prop, value);
                         
+                        if(rangeText){
+                            span.innerHTML = rangeText;
+                        }else{
+                            //内容为空的时候要插入一个光标占位符
+                            holder = this.createCursorPlaceholder();
+                            span.appendChild(holder);
+                        }
                         range.selectNode(rangeParent);
                         //这里没有删除之后的空标签问题
                         range.deleteContents();
                         range.insertNode(frag);
                         if(rangeText){
-                            span.innerHTML = rangeText;
                             range.selectNode(span);
                             this.restoreRange(range);
                         }else{
-                            //内容为空的时候要插入一个光标占位符
-                            holder = this.createCursorPlaceholder();
-                            span.appendChild(holder);
                             range.selectNode(holder);
                             range.collapse();
                             this.restoreRange(range);
                             this.focus();//不focus光标不出来啊
                         }
-                        
                     }
                 }else{//没有包含span, 直接加一个
                     var span = J.dom.node('span', {
