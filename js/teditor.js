@@ -15,6 +15,13 @@
  *
  */
 ;Jx().$package('TE', function(J){
+    var CURSOR_PLACEHOLDER_TYPE = 'IMG';
+    var CURSOR_PLACEHOLDER_STYLE = 'width: 1px; height: 1px;';
+    
+    var INIT_PLACEHOLDER_TYPE = 'BR';
+
+    var LINE_NODE_TYPE = 'DIV';
+    var WORD_NODE_TYPE = 'SPAN';
 
     /**
      * Editor 类定义
@@ -30,8 +37,16 @@
                 this.createToolbar(option);
             }
             this.createDom(container);
+            this.initEvents();
             this.setEditable(true);
             this.newline();
+        },
+        initEvents: function(){
+            //dom event
+            J.event.on(this.body, 'keydown', J.bind(observer.onKeyDown, this))
+
+            //custom event
+            J.event.addObserver(this, 'backspace', J.bind(observer.onBackspace, this));
         },
         createToolbar: function(option){
             //TODO
@@ -57,24 +72,37 @@
             this.iframe = iframe;
             this.textarea = textarea;
             this.win = TE.util.getWindow(iframe);
-            this.doc = TE.util.getDocument(iframe);
+            this.doc = this.win.document;
+            this.body = this.doc.body;
         },
         createCursorPlaceholder: function(){
-            var node = document.createElement('img');
-            node.style.cssText = 'width: 0px; height: 0px;';
+            var node = document.createElement(CURSOR_PLACEHOLDER_TYPE);
+            node.style.cssText = CURSOR_PLACEHOLDER_STYLE;
+            return node;
+        },
+        createLineNode: function(cssText){
+            var node = document.createElement(LINE_NODE_TYPE);
+            node.style.cssText = cssText || '';
+            return node;
+        },
+        createWordNode: function(cssText){
+            var node = document.createElement(WORD_NODE_TYPE);
+            node.style.cssText = cssText || '';
             return node;
         },
         getSelection: function(){
             return TE.util.getSelection(this.win);
         },
         getRange: function(){
-            return TE.util.getRange(this.win, this.doc.body);
+            this.focus();
+            return TE.util.getRange(this.win, this.body);
         },
         restoreRange: function(range){
             var selection = this.getSelection();
             selection.removeAllRanges();
             selection.addRange(range);
         },
+        
 //=================== 对外接口 =====================================
         setEditable: function(status){
             // if(status){
@@ -83,28 +111,32 @@
             //     this.doc.designMode='off';
             // }
             if(status){
-                this.doc.body.contentEditable = true;
+                this.body.contentEditable = true;
             }else{
-                this.doc.body.contentEditable = false;
+                this.body.contentEditable = false;
             }
         },
         focus: function(){
-            this.doc.body.focus();
+            this.body.focus();
         },
         blur: function(){
-            this.doc.body.blur();
+            this.body.blur();
         },
         newline: function(){
-            this.focus();//TODO 这里有隐患
             var range = this.getRange();
-            var div = document.createElement('div');
-            div.innerHTML = '<span><br/></span>';
-            range.insertNode(div);
-            range.selectNodeContents(div);
+            var line = this.createLineNode();
+            var word = this.createWordNode();
+            var br = document.createElement(INIT_PLACEHOLDER_TYPE);
+
+            word.appendChild(br);
+            line.appendChild(word);
+
+            range.insertNode(line);
+            range.selectNode(word);
             this.restoreRange(range);
         },
         clear: function(){
-            this.doc.body.innerHTML = '';
+            this.body.innerHTML = '';
             this.newline();
         },
         setStyle: function(prop, value){
@@ -114,21 +146,23 @@
             //range是否在同一个节点上?
             if(range.startContainer === range.endContainer){
                 //在同一个节点, 继续判断是否已经被包含了 span ?
-                var rangeParent = range.startContainer.parentNode;
+                var rangeParent = range.commonAncestorContainer;
+                if(rangeParent.tagName === WORD_NODE_TYPE){
+                    //如果 本身 range就包含了整一个span(包括span本身), 那直接改样式就行了
+                    if(J.dom.getStyle(rangeParent, prop) !== value){
+                        J.dom.setStyle(rangeParent, prop, value);
+                    }
+                    return;
+                }
+                rangeParent = rangeParent.parentNode;
                 //TODO 光标重合的处理?
-                if(rangeParent.tagName === 'SPAN'){
+                if(rangeParent.tagName === WORD_NODE_TYPE){
                     //已经被span包含了
                     //是否已经有这个样式?
                     if(J.dom.getStyle(rangeParent, prop) === value){
                         //是也, 返回
                         return;
                     }
-                    //是否range的开始和结束是合并的?(表现为光标)
-                    // if(range.startOffset === range.endOffset){
-                    //     //既然在一起, 改变parentNode的样式就行了
-                    //     J.dom.setStyle(rangeParent, prop, value);
-                    //     return;
-                    // }
                     //是否整个span都在range里面?
                     if(range.startOffset === 0 && range.endOffset === range.endContainer.length){
                         //是的整个整个range都在span里, 直接设置parentNode的样式吧
@@ -136,25 +170,23 @@
                     }else{
                         //悲剧, range只是span其中一部分, 拆成三段
                         var oldStyle = rangeParent.style.cssText;
-                        var span = J.dom.node('span', {
-                            style: oldStyle
-                        });
+                        var span = this.createWordNode(oldStyle);
                         var frag = document.createDocumentFragment();
-                        var span2;
-                        var holder;
+                        var tempNode;
+                        var holder = null;
                         var beforeText = range.startContainer.textContent.substr(0, range.startOffset);
                         var afterText = range.endContainer.textContent.substr(range.endOffset);
                         var rangeText = range.toString();
                         if(beforeText){
-                            span2 = span.cloneNode(true);
-                            span2.innerHTML = beforeText;
-                            frag.appendChild(span2);
+                            tempNode = span.cloneNode(true);
+                            tempNode.innerHTML = beforeText;
+                            frag.appendChild(tempNode);
                         }
                         frag.appendChild(span);
                         if(afterText){
-                            span2 = span.cloneNode(true);
-                            span2.innerHTML = afterText;
-                            frag.appendChild(span2);
+                            tempNode = span.cloneNode(true);
+                            tempNode.innerHTML = afterText;
+                            frag.appendChild(tempNode);
                         }
                         J.dom.setStyle(span, prop, value);
                         
@@ -165,24 +197,23 @@
                             holder = this.createCursorPlaceholder();
                             span.appendChild(holder);
                         }
+
+                        //把需要删除的选中后 delete
                         range.selectNode(rangeParent);
-                        //这里没有删除之后的空标签问题
                         range.deleteContents();
                         range.insertNode(frag);
-                        if(rangeText){
-                            range.selectNode(span);
-                            this.restoreRange(range);
-                        }else{
-                            range.selectNode(holder);
+                        range.selectNode(holder || span);
+                        if(holder){
                             range.collapse();
                             this.restoreRange(range);
-                            this.focus();//不focus光标不出来啊
+                            this.focus();
+                        }else{
+                            this.restoreRange(range);
                         }
                     }
                 }else{//没有包含span, 直接加一个
-                    var span = J.dom.node('span', {
-                        style: prop + ': ' + value
-                    });
+                    var span = this.createWordNode(prop + ': ' + value);
+
                     range.surroundContents(span);
                     range.selectNode(span);
                     this.restoreRange(range);
@@ -190,11 +221,11 @@
             }else{//=================================================================
                 //跨了几个节点的range
                 //防止调用 deleteContents 删除之后出现空标签
-                if(range.startOffset === 0 && range.startContainer.parentNode.tagName === 'SPAN'){
+                if(range.startOffset === 0 && range.startContainer.parentNode.tagName === WORD_NODE_TYPE){
                     //range的开始处于节点的开始处, 整个选中它吧, 父亲不是span就别捣乱
                     range.setStartBefore(range.startContainer.parentNode);
                 }
-                if(range.endOffset === range.endContainer.length && range.endContainer.parentNode.tagName === 'SPAN'){
+                if(range.endOffset === range.endContainer.length && range.endContainer.parentNode.tagName === WORD_NODE_TYPE){
                     //结束于节点末尾, 也选中他
                     range.setEndAfter(range.endContainer.parentNode);
                 }
@@ -205,9 +236,8 @@
                 while(child = frag.childNodes[0]){
                     if(child.nodeType === 3){//文本节点
                         if(child.textContent){
-                            span = J.dom.node('span', {
-                                style: prop + ': ' + value
-                            });
+                            span = this.createWordNode(prop + ': ' + value);
+         
                             span.innerHTML = child.textContent;
                             retFrag.appendChild(span);
                         }
@@ -230,13 +260,64 @@
                 this.restoreRange(range);
             }
         }//end of setStyle
+
+
     });
     /**
      * 观察者方法
      * @type {Object}
      */
     var observer = {
+        //dom event
+        onKeyDown: function(e){
+            var keyCode = Number(e.keyCode);
+            var altKey = e.altKey, ctrlKey = e.ctrlKey, shiftKey = e.shiftKey;
+            if(keyCode === 8 && !altKey){
+                J.event.notifyObservers(this, 'backspace', e);
+            }else if(keyCode === 13 && !altKey){
+                J.event.notifyObservers(this, 'enter', e);
+            }
+        },
 
+        //custom event
+        onBackspace: function(e){
+            var altKey = e.altKey, ctrlKey = e.ctrlKey, shiftKey = e.shiftKey;
+            if(ctrlKey){//删除到行首
+
+            }else{
+                var range = this.getRange();
+                if(range.startContainer === range.endContainer){
+                    //在同一个节点里
+                    var rangeParent = range.commonAncestorContainer.parentNode;
+                    if(rangeParent.tagName === WORD_NODE_TYPE){
+                        //有span包含
+                        if((range.startOffset === 1 && range.endOffset === 1 && range.endContainer.length === 1) ||
+                            //出现光标的情况, 光标在第一个字符之后, 切只有一个字符了 eg: <span>a[]</span>
+                            (range.startOffset === 0 && range.endOffset === range.endContainer.length)
+                            //整块选中了
+                        ){
+                            e.preventDefault();
+                            range.setEndBefore(rangeParent);
+                            range.setStartBefore(rangeParent);
+                            rangeParent.parentNode.removeChild(rangeParent);
+                            this.restoreRange(range);
+                        }
+                    }
+                }else{//range 包含多个节点, 属于选中范围的情况, 直接delete了
+                    e.preventDefault();
+                    var startContainer = range.startContainer;
+                    var startOffset = range.startOffset;
+                    if(range.startOffset === 0 && range.startContainer.parentNode.tagName === WORD_NODE_TYPE){
+                        range.setStartBefore(range.startContainer.parentNode);
+                    }
+                    if(range.endOffset === range.endContainer.length && range.endContainer.parentNode.tagName === WORD_NODE_TYPE){
+                        range.setEndAfter(range.endContainer.parentNode);
+                    }
+                    range.deleteContents();
+                    this.restoreRange(range);
+                }
+            }
+        }
     }
 
     /**
