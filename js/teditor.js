@@ -90,6 +90,10 @@
             node.style.cssText = cssText || '';
             return node;
         },
+        createCursorNode: function(){
+            var node = document.createElement(INIT_PLACEHOLDER_TYPE);
+            return node;
+        },
         getSelection: function(){
             return TE.util.getSelection(this.win);
         },
@@ -102,7 +106,36 @@
             selection.removeAllRanges();
             selection.addRange(range);
         },
-        
+        handleEmptyLine: function(lineNode, range){
+            //检查这一行是否是空了, 空的话要插入 一个 文字容器
+            if(!lineNode.childElementCount){
+                var word = this.createWordNode();
+                var br = this.createCursorNode();
+                word.appendChild(br);
+                range.insertNode(word);
+                range.selectNode(word);
+            }
+        },
+        getLineNode: function(node){
+            while(node && node !== this.body){
+                if(node.tagName === LINE_NODE_TYPE){
+                    return node;
+                }else{
+                    node = node.parentNode;
+                }
+            }
+            return null;
+        },
+        getWordNode: function(node){
+            while(node && node !== this.body){
+                if(node.tagName === WORD_NODE_TYPE){
+                    return node;
+                }else{
+                    node = node.parentNode;
+                }
+            }
+            return null;
+        },
 //=================== 对外接口 =====================================
         setEditable: function(status){
             // if(status){
@@ -126,7 +159,7 @@
             var range = this.getRange();
             var line = this.createLineNode();
             var word = this.createWordNode();
-            var br = document.createElement(INIT_PLACEHOLDER_TYPE);
+            var br = this.createCursorNode();
 
             word.appendChild(br);
             line.appendChild(word);
@@ -282,29 +315,32 @@
         //custom event
         onBackspace: function(e){
             var altKey = e.altKey, ctrlKey = e.ctrlKey, shiftKey = e.shiftKey;
-            if(ctrlKey){//删除到行首
+            var range = this.getRange();
+            if(ctrlKey){//TODO 删除到行首
 
             }else{
-                var range = this.getRange();
-                if(range.startContainer === range.endContainer){
+                var wordNode = this.getWordNode(range.commonAncestorContainer);
+                if(range.startContainer === range.endContainer && wordNode){
                     //在同一个节点里
-                    var rangeParent = range.commonAncestorContainer.parentNode;
-                    if(rangeParent.tagName === WORD_NODE_TYPE){
-                        //有span包含
-                        if((range.startOffset === 1 && range.endOffset === 1 && range.endContainer.length === 1) ||
-                            //出现光标的情况, 光标在第一个字符之后, 切只有一个字符了 eg: <span>a[]</span>
-                            (range.startOffset === 0 && range.endOffset === range.endContainer.length)
-                            //整块选中了
-                        ){
-                            e.preventDefault();
-                            range.setEndBefore(rangeParent);
-                            range.setStartBefore(rangeParent);
-                            rangeParent.parentNode.removeChild(rangeParent);
-                            this.restoreRange(range);
+                    //有span包含
+                    if((range.startOffset === 1 && range.endOffset === 1 && range.endContainer.length === 1) ||
+                        //出现光标的情况, 光标在第一个字符之后, 切只有一个字符了 eg: <span>a[]</span>
+                        (range.startOffset === 0 && range.endOffset === range.endContainer.length)
+                        //整块选中了
+                    ){
+                        e.preventDefault();
+                        range.setEndBefore(wordNode);
+                        range.setStartBefore(wordNode);
+                        var lineNode = this.getLineNode(wordNode);
+                        wordNode.parentNode.removeChild(wordNode);
+                        if(lineNode){
+                            this.handleEmptyLine(lineNode, range);
                         }
+                        this.restoreRange(range);
                     }
                 }else{//range 包含多个节点, 属于选中范围的情况, 直接delete了
                     e.preventDefault();
+                    var lineNode = this.getLineNode(range.commonAncestorContainer);
                     var startContainer = range.startContainer;
                     var startOffset = range.startOffset;
                     if(range.startOffset === 0 && range.startContainer.parentNode.tagName === WORD_NODE_TYPE){
@@ -314,6 +350,9 @@
                         range.setEndAfter(range.endContainer.parentNode);
                     }
                     range.deleteContents();
+                    if(lineNode){
+                        this.handleEmptyLine(lineNode, range);
+                    }
                     this.restoreRange(range);
                 }
             }
