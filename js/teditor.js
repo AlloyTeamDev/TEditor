@@ -46,7 +46,7 @@
             J.event.on(this.body, 'keydown', J.bind(observer.onKeyDown, this))
 
             //custom event
-            J.event.addObserver(this, 'backspace', J.bind(observer.onBackspace, this));
+            J.event.addObserver(this, 'delete', J.bind(observer.onDelete, this));
         },
         createToolbar: function(option){
             //TODO
@@ -109,6 +109,7 @@
         handleEmptyLine: function(lineNode, range){
             //检查这一行是否是空了, 空的话要插入 一个 文字容器
             if(!lineNode.childElementCount){
+                range.selectNodeContents(lineNode);
                 var word = this.createWordNode();
                 var br = this.createCursorNode();
                 word.appendChild(br);
@@ -135,6 +136,30 @@
                 }
             }
             return null;
+        },
+        // 一堆 range 的判断处理
+        isRangeAtWordStart: function(range){
+            var word = this.getWordNode(range.startContainer);
+            return word && range.startOffset === 0;
+        },
+        isRangeAtWordEnd: function(range){
+            var word = this.getWordNode(range.endContainer);
+            return word && range.endOffset === range.endContainer.length;
+        },
+        isRangeAtWholeWord: function(range){
+            return this.isRangeAtWordStart(range) && this.isRangeAtWordEnd(range);
+        },
+        isRangeAtLineStart: function(range){
+            var line = this.getLineNode(range.startContainer);
+            return line && range.startOffset === 0;
+        },
+        isRangeAtLineEnd: function(range){
+            var line = this.getLineNode(range.endContainer);
+            //判断行尾的节点都是已经选中 word 节点的, 所以要用 childElementCount
+            return line && range.endOffset === line.childElementCount;
+        },
+        isRangeAtWholeLine: function(range){
+            return this.isRangeAtLineStart(range) && this.isRangeAtLineEnd(range);
         },
 //=================== 对外接口 =====================================
         setEditable: function(status){
@@ -188,7 +213,7 @@
                     return;
                 }
                 rangeParent = rangeParent.parentNode;
-                //TODO 光标重合的处理?
+                //光标重合的处理?
                 if(rangeParent.tagName === WORD_NODE_TYPE){
                     //已经被span包含了
                     //是否已经有这个样式?
@@ -263,6 +288,7 @@
                     range.setEndAfter(range.endContainer.parentNode);
                 }
                 //clone一份选中节点, cloneContents 方法会自动闭合选中的标签
+                //TODO 跨多行的处理
                 var frag = range.cloneContents();
                 var retFrag = document.createDocumentFragment();
                 var child, span, firstChild, lastChild;
@@ -306,26 +332,28 @@
             var keyCode = Number(e.keyCode);
             var altKey = e.altKey, ctrlKey = e.ctrlKey, shiftKey = e.shiftKey;
             if(keyCode === 8 && !altKey){
-                J.event.notifyObservers(this, 'backspace', e);
+                //TODO 还有delete 键呢?
+                J.event.notifyObservers(this, 'delete', e);
             }else if(keyCode === 13 && !altKey){
                 J.event.notifyObservers(this, 'enter', e);
             }
         },
 
         //custom event
-        onBackspace: function(e){
+        onDelete: function(e){
             var altKey = e.altKey, ctrlKey = e.ctrlKey, shiftKey = e.shiftKey;
             var range = this.getRange();
-            if(ctrlKey){//TODO 删除到行首
+            if(ctrlKey && range.collapsed){//删除到行首
+                //光标是重合的时候, 按 ctrl + delete 会删除到行首
 
             }else{
                 var wordNode = this.getWordNode(range.commonAncestorContainer);
                 if(range.startContainer === range.endContainer && wordNode){
-                    //在同一个节点里
+                    //在同一个word节点里
                     //有span包含
                     if((range.startOffset === 1 && range.endOffset === 1 && range.endContainer.length === 1) ||
                         //出现光标的情况, 光标在第一个字符之后, 切只有一个字符了 eg: <span>a[]</span>
-                        (range.startOffset === 0 && range.endOffset === range.endContainer.length)
+                        this.isRangeAtWholeWord(range)
                         //整块选中了
                     ){
                         e.preventDefault();
@@ -341,20 +369,39 @@
                 }else{//range 包含多个节点, 属于选中范围的情况, 直接delete了
                     e.preventDefault();
                     var lineNode = this.getLineNode(range.commonAncestorContainer);
-                    var startContainer = range.startContainer;
-                    var startOffset = range.startOffset;
-                    if(range.startOffset === 0 && range.startContainer.parentNode.tagName === WORD_NODE_TYPE){
-                        range.setStartBefore(range.startContainer.parentNode);
+                    var relateParent, relateOffset;
+                    if(this.isRangeAtWordStart(range)){
+                        wordNode = this.getWordNode(range.startContainer);
+                        range.setStartBefore(wordNode);
                     }
-                    if(range.endOffset === range.endContainer.length && range.endContainer.parentNode.tagName === WORD_NODE_TYPE){
-                        range.setEndAfter(range.endContainer.parentNode);
+                    if(this.isRangeAtWordEnd(range)){
+                        wordNode = this.getWordNode(range.endContainer);
+                        range.setEndAfter(wordNode);
+                    }
+                    if(!lineNode){//多行的问题
+                        //没有行节点, 说明选中的是跨行的
+                        if(this.isRangeAtLineEnd(range)){
+                            //最后一行是选择到行末的
+                            lineNode = this.getLineNode(range.endContainer);
+                            range.setEndAfter(lineNode);
+                            lineNode = this.getLineNode(range.startContainer);
+                        }else{
+                            //没有选到行末, 比较悲催
+                            relateParent = range.startContainer;
+                            relateOffset = range.startOffset;
+                        }
                     }
                     range.deleteContents();
+                    if(relateParent){
+                        //把光标放到 选区之前
+                        range.setStart(relateParent, relateOffset);
+                        range.collapse(true);
+                    }
                     if(lineNode){
                         this.handleEmptyLine(lineNode, range);
                     }
                     this.restoreRange(range);
-                }
+                }//end of if(wordNode) else
             }
         }
     }
