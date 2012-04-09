@@ -82,11 +82,15 @@
         },
         createLineNode: function(cssText){
             var node = document.createElement(LINE_NODE_TYPE);
+            node.className = 't-line';
+            node.setAttribute('tline', 'tline');
             node.style.cssText = cssText || '';
             return node;
         },
         createWordNode: function(cssText){
             var node = document.createElement(WORD_NODE_TYPE);
+            node.className = 't-word';
+            node.setAttribute('tword', 'tword');
             node.style.cssText = cssText || '';
             return node;
         },
