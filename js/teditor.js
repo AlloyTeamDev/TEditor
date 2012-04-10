@@ -111,227 +111,49 @@
         },
         /**
          * 修正选区, 把选区限制在line和word里面
+         * 
          */
         revise: function(){
             var range = this.range;
 
-            if(range.startContainer === range.endContainer){
-                //选区是在同一个节点里面,但是不知道是同一个 word 还是同一个 line
-                //可能的情况: 
-                //<L><W>[xxx]</W></L>
-                //<L>[<W>xxx</W>]</L>
-                //<BODY>[<L><W>xxx</W></L>]</BODY>
-                var startContainer = range.startContainer;
-                var endContainer = range.endContainer;
-                var startOffset = range.startOffset;
-                var endOffset = range.endOffset;
-                if(TWord.isWord(startContainer)){
-                    this.startWord = startContainer;
-                    this.startWordOffset = startOffset;
-                    this.startLine = TLine.getLine(startContainer);
+            var startContainer = range.startContainer;
+            var endContainer = range.endContainer;
 
-                    this.endWord = endContainer;
-                    this.endWordOffset = endOffset;
-                    this.endLine = this.startLine;
 
-                    this.startAtWordStart = startOffset === 0;
-                    this.startAtWordEnd = startOffset === startContainer.length;
-                    this.startAtEmptyWord = this.startAtWordStart && this.startAtWordEnd;
+            var scIsText = startContainer.nodeType === 3;
+            var ecIsText = endContainer.nodeType === 3;
 
-                    this.endAtWordStart = endOffset === 0;
-                    this.endAtWordEnd = endOffset === endContainer.length;
-                    this.endAtEmptyWord = this.endAtWordStart && this.endAtWordEnd;
-
-                    this.isInEmptyWord = this.startAtEmptyWord && this.endAtEmptyWord;
-                }else{
-
-                }
-            }else{
-                //不在同一个节点, 有可能是在同一个line但是跨了几个 word
-                //或者是跨了line的
-                
-            }
-
-            if(range.startContainer === range.endContainer){
-                //在同一个节点, 继续判断是否已经被包含了 span ?
-                var rangeParent = range.commonAncestorContainer;
-                if(rangeParent.tagName === WORD_NODE_TYPE){
-                    //如果 本身 range就包含了整一个span(包括span本身), 那直接改样式就行了
-                    if(J.dom.getStyle(rangeParent, prop) !== value){
-                        J.dom.setStyle(rangeParent, prop, value);
-                    }
-                    return;
-                }
-                rangeParent = rangeParent.parentNode;
-                //光标重合的处理?
-                if(rangeParent.tagName === WORD_NODE_TYPE){
-                    //已经被span包含了
-                    //是否已经有这个样式?
-                    if(J.dom.getStyle(rangeParent, prop) === value){
-                        //是也, 返回
-                        return;
-                    }
-                    //是否整个span都在range里面?
-                    if(range.startOffset === 0 && range.endOffset === range.endContainer.length){
-                        //是的整个整个range都在span里, 直接设置parentNode的样式吧
-                        J.dom.setStyle(rangeParent, prop, value);
-                    }else{
-                        //悲剧, range只是span其中一部分, 拆成三段
-                        var oldStyle = rangeParent.style.cssText;
-                        var span = this.createWordNode(oldStyle);
-                        var frag = document.createDocumentFragment();
-                        var tempNode;
-                        var holder = null;
-                        var beforeText = range.startContainer.textContent.substr(0, range.startOffset);
-                        var afterText = range.endContainer.textContent.substr(range.endOffset);
-                        var rangeText = range.toString();
-                        if(beforeText){
-                            tempNode = span.cloneNode(true);
-                            tempNode.innerHTML = beforeText;
-                            frag.appendChild(tempNode);
-                        }
-                        frag.appendChild(span);
-                        if(afterText){
-                            tempNode = span.cloneNode(true);
-                            tempNode.innerHTML = afterText;
-                            frag.appendChild(tempNode);
-                        }
-                        J.dom.setStyle(span, prop, value);
-                        
-                        if(rangeText){
-                            span.innerHTML = rangeText;
-                        }else{
-                            //内容为空的时候要插入一个光标占位符
-                            holder = this.createCursorPlaceholder();
-                            span.appendChild(holder);
-                        }
-
-                        //把需要删除的选中后 delete
-                        range.selectNode(rangeParent);
-                        range.deleteContents();
-                        range.insertNode(frag);
-                        range.selectNode(holder || span);
-                        if(holder){
-                            range.collapse();
-                            this.restoreRange(range);
-                            this.focus();
-                        }else{
-                            this.restoreRange(range);
-                        }
-                    }
-                }else{//没有包含span, 直接加一个
-                    var span = this.createWordNode(prop + ': ' + value);
-
-                    range.surroundContents(span);
-                    range.selectNode(span);
-                    this.restoreRange(range);
-                }
-            }else{//=================================================================
-                //跨了几个节点的range
-                //防止调用 deleteContents 删除之后出现空标签
-                if(range.startOffset === 0 && range.startContainer.parentNode.tagName === WORD_NODE_TYPE){
-                    //range的开始处于节点的开始处, 整个选中它吧, 父亲不是span就别捣乱
-                    range.setStartBefore(range.startContainer.parentNode);
-                }
-                if(range.endOffset === range.endContainer.length && range.endContainer.parentNode.tagName === WORD_NODE_TYPE){
-                    //结束于节点末尾, 也选中他
-                    range.setEndAfter(range.endContainer.parentNode);
-                }
-                //clone一份选中节点, cloneContents 方法会自动闭合选中的标签
-                //TODO 跨多行的处理
-                var frag = range.cloneContents();
-                var retFrag = document.createDocumentFragment();
-                var child, span, firstChild, lastChild;
-                while(child = frag.childNodes[0]){
-                    if(child.nodeType === 3){//文本节点
-                        if(child.textContent){
-                            span = this.createWordNode(prop + ': ' + value);
-         
-                            span.innerHTML = child.textContent;
-                            retFrag.appendChild(span);
-                        }
-                        frag.removeChild(child);
-                    }else if(child.nodeType === 1){//element
-                        if(child.textContent){
-                            if(J.dom.getStyle(child, prop) !== value){
-                            //已经有这个样式就别搞了嘛
-                                J.dom.setStyle(child, prop, value);
-                            }
-                            retFrag.appendChild(child);
-                        }else{//这个节点没有文本内容, 浪费表情 <_<
-                            frag.removeChild(child);
-                        }
+            var node;
+            if(!scIsText){
+                node = startContainer;
+                while(node.firstChild){
+                    node = node.firstChild;
+                    if(node.nodeType === 3){
+                        range.setStart(node, 0);
+                        break;
                     }
                 }
-                //deleteContents 会删除选中内容后, 自动闭合周边的标签
-                range.deleteContents();
-                range.insertNode(retFrag);
-                this.restoreRange(range);
             }
-        }
 
-
-
-        createLineNode: function(cssText){
-            var node = document.createElement(LINE_NODE_TYPE);
-            node.setAttribute('tline', 'tline');
-            node.style.cssText = cssText || '';
-            return node;
-        },
-        createWordNode: function(cssText){
-            var node = document.createElement(WORD_NODE_TYPE);
-            node.setAttribute('tword', 'tword');
-            node.style.cssText = cssText || '';
-            return node;
-        },
-        createCursorNode: function(){
-            var node = document.createElement(INIT_PLACEHOLDER_TYPE);
-            node.setAttribute('tcursor', 'tcursor');
-            return node;
-        },
-        handleEmptyLine: function(lineNode, range){
-            //检查这一行是否是空了, 空的话要插入 一个 文字容器
-            if(!lineNode.childElementCount){
-                range.selectNodeContents(lineNode);
-                var word = this.createWordNode();
-                var br = this.createCursorNode();
-                word.appendChild(br);
-                range.insertNode(word);
-                range.selectNode(word);
-            }
-        },
-        getLineNode: function(node){
-            while(node && node !== this.body){
-                if(node.tagName === LINE_NODE_TYPE){
-                    return node;
-                }else{
-                    node = node.parentNode;
+            if(!ecIsText){
+                node = endContainer;
+                while(node.firstChild){
+                    node = node.firstChild;
+                    if(node.nodeType === 3){
+                        range.setEnd(node, node.length);
+                        break;
+                    }
                 }
             }
-            return null;
-        },
-        getWordNode: function(node){
-            while(node && node !== this.body){
-                if(node.tagName === WORD_NODE_TYPE){
-                    return node;
-                }else{
-                    node = node.parentNode;
-                }
-            }
-            return null;
         },
         getSelection: function(){
             return TE.util.getSelection(this.win);
         },
-        getRange: function(){
-            this.focus();
-            return new TRange(this.win, this.body);
-        },
-        restoreRange: function(range){
+        restore: function(){
             var selection = this.getSelection();
             selection.removeAllRanges();
-            selection.addRange(range);
-        },
+            selection.addRange(this.range);
+        }
     });
 
 
@@ -446,7 +268,8 @@
         },
         getRange: function(){
             this.focus();
-            return new TRange(this.win, this.body);
+            return TE.util.getRange(this.win, this.body);
+            // return new TRange(this.win, this.body);
         },
         restoreRange: function(range){
             var selection = this.getSelection();
